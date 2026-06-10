@@ -95,7 +95,17 @@ app.use(express.json());
 app.use("/mcp", (req, _res, next) => {
   const accept = req.headers.accept ?? "";
   if (!accept.includes("application/json") || !accept.includes("text/event-stream")) {
-    req.headers.accept = "application/json, text/event-stream";
+    const normalizedAccept = "application/json, text/event-stream";
+    req.headers.accept = normalizedAccept;
+
+    const rawAcceptIndex = req.rawHeaders.findIndex(
+      (header) => header.toLowerCase() === "accept"
+    );
+    if (rawAcceptIndex >= 0) {
+      req.rawHeaders[rawAcceptIndex + 1] = normalizedAccept;
+    } else {
+      req.rawHeaders.push("Accept", normalizedAccept);
+    }
   }
   next();
 });
