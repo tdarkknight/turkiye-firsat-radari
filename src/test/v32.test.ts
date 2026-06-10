@@ -38,6 +38,14 @@ const ORNEK_TR_RSS = `<?xml version="1.0"?><rss><channel>
 <item><title>SuperTool Türkiye pazarına girdi</title><link>https://webrazzi.com/supertool</link><pubDate>${new Date().toUTCString()}</pubDate><source>Webrazzi</source></item>
 </channel></rss>`;
 
+const ORNEK_GENEL_AD_ATOM = `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">
+<entry><title>Gravity — solar system simulator</title><link href="https://www.producthunt.com/posts/gravity"/><published>${new Date().toISOString()}</published><summary>Explore planets and orbital physics</summary></entry>
+</feed>`;
+
+const ORNEK_ALAKASIZ_TR_RSS = `<?xml version="1.0"?><rss><channel>
+<item><title>Lucid Gravity SUV Türkiye yollarına geliyor</title><link>https://ornek.com/gravity-suv</link><pubDate>${new Date().toUTCString()}</pubDate><source>Örnek</source></item>
+</channel></rss>`;
+
 // ── atom parser ──
 test("atomEntryleriCoz: entry, link href ve içerik özeti çözer", () => {
   const entryler = atomEntryleriCoz(ORNEK_ATOM);
@@ -137,6 +145,19 @@ test("klonRadar: feed'ler tamamen çökünce 'veri bulunamadı'", async () => {
   const { rapor, veriKalitesi } = await klonRadar({ fetchFn: olu, retry: 0 }, 4);
   assert.ok(rapor.includes("veri bulunamadı"));
   assert.equal(veriKalitesi, 0);
+});
+
+test("klonRadar: genel ürün adındaki alakasız TR haberini bağlam doğrulamasıyla eler", async () => {
+  cacheTemizle();
+  const f = mockFetch({
+    "producthunt.com": { body: ORNEK_GENEL_AD_ATOM },
+    "hnrss.org": { body: "<rss><channel></channel></rss>" },
+    "Gravity": { body: ORNEK_ALAKASIZ_TR_RSS },
+  });
+  const { rapor } = await klonRadar({ fetchFn: f }, 1);
+  assert.ok(rapor.includes("BOŞLUK ADAYI"));
+  assert.ok(rapor.includes("1 ham sonuç bağlam doğrulamasını geçemedi"));
+  assert.ok(!rapor.includes("TR sinyali: Lucid Gravity"));
 });
 
 // ── radar hafızası ──

@@ -263,6 +263,7 @@ export async function gunlukFirsatRadari(secenek: FetchSecenek = {}): Promise<Ar
 
 export interface KlonAdayi {
   urun: GlobalUrun;
+  trHamSinyalSayisi: number;
   trSinyalSayisi: number;
   trKanitlar: Kanit[];
   durum: "boşluk adayı" | "TR'de sinyal var" | "kontrol edilemedi";
@@ -271,6 +272,46 @@ export interface KlonAdayi {
 function urunAramaAdi(ad: string): string {
   // "Ürün Adı — tagline" / "Ürün Adı - tagline" formatlarından adı ayıkla
   return ad.split(/[—–|:-]/)[0].trim().slice(0, 60);
+}
+
+const KLON_BAGLAM_DURAK_KELIMELERI = new Set([
+  "about", "after", "again", "also", "another", "anything", "built", "create", "from", "into", "just", "magic",
+  "make", "more", "open", "product", "simple", "smart", "that", "their", "this", "tool", "using", "with", "your",
+  "icin", "olan", "olarak", "yeni",
+]);
+
+function normalizeKlonMetni(metin: string): string {
+  return metin
+    .toLocaleLowerCase("tr")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9çğıöşü]+/g, " ")
+    .trim();
+}
+
+function urunBaglamKelimeleri(urun: GlobalUrun): string[] {
+  const adParcalari = urun.ad.split(/[—–|:-]/).slice(1).join(" ");
+  const markaKelimeleri = new Set(normalizeKlonMetni(urunAramaAdi(urun.ad)).split(" "));
+  return [...new Set(normalizeKlonMetni(`${adParcalari} ${urun.ozet ?? ""}`).split(" "))]
+    .filter((kelime) => kelime.length >= 4 && !markaKelimeleri.has(kelime) && !KLON_BAGLAM_DURAK_KELIMELERI.has(kelime))
+    .slice(0, 6);
+}
+
+function ayirtEdiciMarkaAdi(ad: string): boolean {
+  const marka = urunAramaAdi(ad);
+  return marka.trim().split(/\s+/).length > 1 || /\d/.test(marka) || /[a-z][A-Z]/.test(marka);
+}
+
+function trKanitlariniDogrula(urun: GlobalUrun, kanitlar: Kanit[]): Kanit[] {
+  const marka = normalizeKlonMetni(urunAramaAdi(urun.ad));
+  const baglam = urunBaglamKelimeleri(urun);
+  const markaTekBasinaYeterli = ayirtEdiciMarkaAdi(urun.ad);
+
+  return kanitlar.filter((kanit) => {
+    const baslik = normalizeKlonMetni(kanit.iddia);
+    if (!baslik.includes(marka)) return false;
+    return markaTekBasinaYeterli || baglam.some((kelime) => baslik.includes(kelime));
+  });
 }
 
 export async function klonRadar(secenek: FetchSecenek = {}, maksUrun = 6): Promise<ArastirmaCiktisi> {
@@ -287,15 +328,18 @@ export async function klonRadar(secenek: FetchSecenek = {}, maksUrun = 6): Promi
   const adaylar: KlonAdayi[] = await Promise.all(
     urunler.map(async (urun): Promise<KlonAdayi> => {
       const aramaAdi = urunAramaAdi(urun.ad);
-      const trSonuc = await haberAra(`"${aramaAdi}" Türkiye`, secenek);
+      const baglam = urunBaglamKelimeleri(urun).slice(0, 2).join(" ");
+      const trSonuc = await haberAra(`"${aramaAdi}" Türkiye${baglam ? ` ${baglam}` : ""}`, secenek);
       if (trSonuc.durum === "hata") {
-        return { urun, trSinyalSayisi: 0, trKanitlar: [], durum: "kontrol edilemedi" };
+        return { urun, trHamSinyalSayisi: 0, trSinyalSayisi: 0, trKanitlar: [], durum: "kontrol edilemedi" };
       }
+      const dogrulanmisKanitlar = trKanitlariniDogrula(urun, trSonuc.kanitlar);
       return {
         urun,
-        trSinyalSayisi: trSonuc.kanitlar.length,
-        trKanitlar: trSonuc.kanitlar.slice(0, 2),
-        durum: trSonuc.kanitlar.length === 0 ? "boşluk adayı" : "TR'de sinyal var",
+        trHamSinyalSayisi: trSonuc.kanitlar.length,
+        trSinyalSayisi: dogrulanmisKanitlar.length,
+        trKanitlar: dogrulanmisKanitlar.slice(0, 2),
+        durum: dogrulanmisKanitlar.length === 0 ? "boşluk adayı" : "TR'de sinyal var",
       };
     })
   );
@@ -316,7 +360,11 @@ export async function klonRadar(secenek: FetchSecenek = {}, maksUrun = 6): Promi
         ...(a.durum === "TR'de sinyal var"
           ? a.trKanitlar.map((k) => `     TR sinyali: ${k.iddia.slice(0, 100)} → ${k.url}`)
           : a.durum === "boşluk adayı"
-            ? [`     TR haber taraması: 0 sonuç → görünür yerel oyuncu sinyali yok`]
+            ? [
+                a.trHamSinyalSayisi > 0
+                  ? `     TR haber taraması: ${a.trHamSinyalSayisi} ham sonuç bağlam doğrulamasını geçemedi → görünür yerel oyuncu sinyali yok`
+                  : `     TR haber taraması: 0 sonuç → görünür yerel oyuncu sinyali yok`,
+              ]
             : [`     TR taraması başarısız — veri bulunamadı, boşluk iddiası YAPILAMAZ`]),
       ])
     : ["  ⛔ veri bulunamadı — global ürün feed'lerine erişilemedi."];
@@ -332,6 +380,7 @@ export async function klonRadar(secenek: FetchSecenek = {}, maksUrun = 6): Promi
     ``,
     `RİSKLER:`,
     `  ⚠️ "TR'de haber yok" ≠ "TR'de rakip yok" — sessiz büyüyen yerel rakipler haberlere yansımayabilir. Boşluk adaylarını rakip_analiz aracıyla derinleştir.`,
+    `  ⚠️ Genel ürün adlarındaki alakasız haber eşleşmeleri ürün açıklamasıyla bağlam doğrulamasından geçirilir; bu filtre bazı gerçek eşleşmeleri de eleyebilir.`,
     `  ⚠️ Global ürünün TR'de talep karşılığı olduğu varsayılamaz; fiyatlandırma ve alışkanlık farkı kontrol edilmeli.`,
     ``,
     `ÖNERİLEN MVP: En güçlü boşluk adayını seç → ürünün global landing'ini incele → TR'ye yerelleştirilmiş tek özellikli versiyonun landing page'ini 1 haftada test et.`,
