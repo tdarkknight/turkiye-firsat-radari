@@ -90,6 +90,16 @@ function serverOlustur(): McpServer {
 const app = express();
 app.use(express.json());
 
+// Poke's cloud MCP discovery currently requests JSON only. The MCP SDK requires
+// clients to advertise both response formats, so normalize the header for it.
+app.use("/mcp", (req, _res, next) => {
+  const accept = req.headers.accept ?? "";
+  if (!accept.includes("application/json") || !accept.includes("text/event-stream")) {
+    req.headers.accept = "application/json, text/event-stream";
+  }
+  next();
+});
+
 // Stateless mod: her istek için taze transport — Poke tunnel ve serverless ortamlar için en sağlamı.
 app.post("/mcp", async (req, res) => {
   try {
