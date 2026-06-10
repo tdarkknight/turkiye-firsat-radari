@@ -161,3 +161,49 @@ export function raporYaz(fikir: string, sonuc: AnalizSonuc): string {
   satirlar.push(``, `Tavsiye: ${sonuc.tavsiye}`);
   return satirlar.join("\n");
 }
+
+// ── Canlı veri entegrasyonu ──
+// Statik keyword skoru 90'a ölçeklenir, kalan 10 puan canlı kanıtların
+// kaynak güvenilirliği × güncellik × hacim kalitesinden gelir (veriKalitesi 0..10).
+// Canlı veri alınamazsa skor offline modda kalır ve bu açıkça belirtilir.
+
+export interface CanliAnalizSonuc extends AnalizSonuc {
+  canliVeriKalitesi: number | null; // null = canlı veri alınamadı
+}
+
+export function canliVeriyleBirlestir(statik: AnalizSonuc, veriKalitesi: number | null): CanliAnalizSonuc {
+  if (veriKalitesi === null) {
+    return {
+      ...statik,
+      canliVeriKalitesi: null,
+      riskler: [...statik.riskler, "Canlı veri alınamadı — skor offline keyword modunda hesaplandı, güncel pazar sinyali doğrulanamadı."],
+    };
+  }
+
+  const olcekliStatik = Math.round(statik.puan * 0.9);
+  const puan = Math.max(0, Math.min(100, olcekliStatik + veriKalitesi));
+  const karar: AnalizSonuc["karar"] = puan < 40 ? "ELENDİ" : puan < 70 ? "ORTA" : "FIRSAT";
+
+  const riskler = [...statik.riskler];
+  if (veriKalitesi <= 3) {
+    riskler.push(`Canlı kanıt kalitesi düşük (${veriKalitesi}/10) — güncel kaynaklarda bu fikri destekleyen güçlü sinyal bulunamadı.`);
+  }
+
+  return {
+    ...statik,
+    puan,
+    karar,
+    riskler,
+    canliVeriKalitesi: veriKalitesi,
+    kirilim: {
+      ...Object.fromEntries(
+        Object.entries(statik.kirilim).map(([b, k]) => [b, { ...k, not: `${k.not} (0.9x ölçekli)` }])
+      ),
+      "Canlı Veri Doğrulaması": {
+        puan: veriKalitesi,
+        max: 10,
+        not: "Güncel kanıtların kaynak güvenilirliği × tazelik × hacim puanı",
+      },
+    },
+  };
+}

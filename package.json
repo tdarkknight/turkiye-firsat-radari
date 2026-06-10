@@ -1,7 +1,7 @@
 {
   "name": "turkiye-firsat-radari-mcp",
-  "version": "1.0.0",
-  "description": "Türkiye Fırsat Radarı - Poke uyumlu MCP server. AI/startup fikirlerini Türkiye pazarına göre analiz eder, puanlar, istersen Notion'a kaydeder.",
+  "version": "2.0.0",
+  "description": "Türkiye Fırsat Radarı - Poke uyumlu MCP server. AI/startup fikirlerini güncel, kaynaklı Türkiye pazar verisiyle analiz eder, puanlar, istersen Notion'a kaydeder.",
   "type": "module",
   "main": "dist/index.js",
   "engines": {
@@ -10,7 +10,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsc && node dist/index.js"
+    "dev": "tsc && node dist/index.js",
+    "test": "tsc && node --test dist/test/*.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

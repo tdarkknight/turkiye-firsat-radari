@@ -1,20 +1,45 @@
-# 🇹🇷 Türkiye Fırsat Radarı — MCP Server
+# 🇹🇷 Türkiye Fırsat Radarı — MCP Server (v2)
 
-Poke uyumlu MCP server. AI/startup/internet iş fikirlerini Türkiye pazarına göre analiz eder,
-kötü fikirleri eler, iyi fikirleri 100 üzerinden puanlar ve istersen Notion database'ine kaydeder.
+Poke uyumlu MCP server. AI/startup/internet iş fikirlerini **güncel, kaynaklı Türkiye pazar
+verisiyle** analiz eder, kötü fikirleri eler, iyi fikirleri 100 üzerinden puanlar ve istersen
+Notion database'ine kaydeder.
 
 - **TypeScript + Node.js 18+**, Streamable HTTP transport (`/mcp`)
-- **Full lokal çalışır** — analiz için hiçbir harici API gerekmez
-- **Notion opsiyonel** — token yoksa analiz aracı yine çalışır
+- **Ücretsiz, API anahtarsız kaynaklar**: Google News RSS, Google Trends RSS, Resmî Gazete, TÜİK (best-effort)
+- **Uydurma yok**: her iddia kaynak URL'si + erişim tarihiyle döner; kaynak yoksa açıkça `veri bulunamadı` yazar
+- **Kaynak güvenilirliği ve veri güncelliği puana dahildir** (gov.tr=1.0 … bilinmeyen=0.5; <7 gün=1.0 … >1 yıl=0.2)
+- **Dayanıklı**: timeout, retry, rate-limit ve bozuk kaynak durumlarında çökmeden `veri bulunamadı`'ya düşer
+- **Notion opsiyonel** — token yoksa analiz araçları yine çalışır
 - **Cloud'a da atılabilir** — Render free tier config'i hazır
 
 ## Araçlar
 
 | Araç | Ne yapar |
 |---|---|
-| `firsat_analiz` | Fikri analiz eder: pazar potansiyeli (25), Türkiye uyumu (25), rekabet (20), regülasyon riski (15), gelir modeli (15). Toplam 100. **<40 = ELENDİ, 40-69 = ORTA, 70+ = FIRSAT** |
+| `firsat_analiz` | Statik skor (0.9x ölçekli: pazar 25, TR uyumu 25, rekabet 20, regülasyon 15, gelir 15) + canlı veri doğrulaması (10). **<40 = ELENDİ, 40-69 = ORTA, 70+ = FIRSAT** |
+| `pazar_arastir` | Konu için haber + pazar büyüklüğü + yatırım sinyalleri + TÜİK denemesi. Özet + kanıtlar + riskler + önerilen MVP |
+| `rakip_analiz` | Rakip / fiyat / müşteri şikayeti sinyalleri ve pazar boşlukları (haber kaynaklı) |
+| `regulasyon_kontrol` | Bugünkü Resmî Gazete fihristi + regülasyon haberleri taraması (hukuki danışmanlık değildir) |
+| `gunluk_firsat_radari` | Türkiye Google Trends + AI/startup/yatırım haberlerinden günün fırsat sinyalleri |
 | `notion_kaydet` | Analiz edip sonucu Notion database'ine yazar (token gerekir) |
 | `radar_durum` | Server ve Notion bağlantı durumunu gösterir |
+
+## Veri kaynakları ve dürüstlük kuralları
+
+- **Google News RSS** (`news.google.com/rss/search`) — Türkiye odaklı haber araması
+- **Google Trends RSS** (`trends.google.com/trending/rss?geo=TR`) — günlük arama trendleri
+- **Resmî Gazete** (`resmigazete.gov.tr`) — günün fihristi, sunucu taraflı HTML
+- **TÜİK** (`data.tuik.gov.tr`) — portal JavaScript gerektirdiği için sunucu taraflı erişim sınırlıdır;
+  erişilemezse araç bunu açıkça söyler, tahmin üretmez
+- Şikayet platformları (ör. Şikayetvar) kullanım şartları gereği **scrape edilmez**; şikayet sinyali
+  haber kaynaklarından derlenir
+- Sonuçlar 10 dk cache'lenir (kaynaklara nazik davranmak için)
+
+## Test
+
+```bash
+npm test   # tsc build + node:test ile 24 birim testi (ağa çıkmaz, fetch mock'lanır)
+```
 
 ## Kurulum (Lokal)
 

@@ -7,23 +7,26 @@ import express from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-import { fikriAnalizEt, raporYaz } from "./analiz.js";
+import { canliVeriyleBirlestir, fikriAnalizEt, raporYaz } from "./analiz.js";
+import { gunlukFirsatRadari, pazarArastir, rakipAnaliz, regulasyonKontrol } from "./arastirma.js";
 import { notionaKaydet, notionHazirMi } from "./notion.js";
 
 function serverOlustur(): McpServer {
   const server = new McpServer({
     name: "turkiye-firsat-radari",
-    version: "1.0.0",
+    version: "2.0.0",
   });
 
   server.registerTool(
     "firsat_analiz",
     {
-      title: "Türkiye Fırsat Analizi",
+      title: "Türkiye Fırsat Analizi (canlı verili)",
       description:
         "Yeni bir AI/startup/internet iş fikrini Türkiye pazarına göre analiz eder. " +
-        "Pazar potansiyeli, Türkiye uyumu, rekabet, regülasyon riski ve gelir modelini değerlendirip " +
-        "100 üzerinden puanlar. 40 altı fikirler elenir, 70+ fikirler FIRSAT olarak işaretlenir.",
+        "Statik skorlamayı güncel haber/trend kanıtlarıyla birleştirir: pazar potansiyeli, Türkiye uyumu, " +
+        "rekabet, regülasyon riski, gelir modeli + canlı veri doğrulaması (kaynak güvenilirliği ve güncellik puana dahil). " +
+        "100 üzerinden puanlar: 40 altı ELENDİ, 70+ FIRSAT. Her kanıt için kaynak URL'si ve erişim tarihi döner; " +
+        "kaynak bulunamazsa 'veri bulunamadı' yazar, tahmin üretmez.",
       inputSchema: {
         fikir: z.string().min(10).describe("İş fikrinin açıklaması (ne kadar detaylı o kadar iyi)"),
         sektor: z.string().optional().describe("Sektör (örn: fintech, edtech, oyun, e-ticaret)"),
@@ -32,10 +35,91 @@ function serverOlustur(): McpServer {
       },
     },
     async ({ fikir, sektor, hedef_kitle, gelir_modeli }) => {
-      const sonuc = fikriAnalizEt(fikir, sektor, hedef_kitle, gelir_modeli);
+      const statik = fikriAnalizEt(fikir, sektor, hedef_kitle, gelir_modeli);
+      const arastirmaKonusu = [sektor, fikir.slice(0, 80)].filter(Boolean).join(" ");
+
+      let canliRapor = "";
+      let veriKalitesi: number | null = null;
+      try {
+        const arastirma = await pazarArastir(arastirmaKonusu);
+        veriKalitesi = arastirma.veriKalitesi;
+        canliRapor = `\n\n${arastirma.rapor}`;
+      } catch (e) {
+        canliRapor = `\n\n⛔ Canlı veri araştırması başarısız: ${e instanceof Error ? e.message : String(e)} — skor offline modda.`;
+      }
+
+      const sonuc = canliVeriyleBirlestir(statik, veriKalitesi);
       return {
-        content: [{ type: "text", text: raporYaz(fikir, sonuc) }],
+        content: [{ type: "text", text: `${raporYaz(fikir, sonuc)}${canliRapor}` }],
       };
+    }
+  );
+
+  server.registerTool(
+    "pazar_arastir",
+    {
+      title: "Pazar Araştırması (Türkiye)",
+      description:
+        "Bir konu/sektör için Türkiye odaklı güncel pazar araştırması yapar: haber sinyalleri, pazar büyüklüğü " +
+        "haberleri, yatırım/girişim hareketliliği ve TÜİK açık verisi denemesi. Her iddia kaynak URL'si ve erişim " +
+        "tarihiyle döner; veri yoksa 'veri bulunamadı' der. Kısa özet + kanıtlar + riskler + önerilen MVP formatında.",
+      inputSchema: {
+        konu: z.string().min(3).describe("Araştırılacak konu/sektör (örn: 'KOBİ muhasebe yazılımı')"),
+      },
+    },
+    async ({ konu }) => {
+      const { rapor } = await pazarArastir(konu);
+      return { content: [{ type: "text", text: rapor }] };
+    }
+  );
+
+  server.registerTool(
+    "rakip_analiz",
+    {
+      title: "Rakip Analizi (Türkiye)",
+      description:
+        "Bir konu/ürün için Türkiye'deki rakipleri, fiyat sinyallerini ve müşteri şikayetlerini haber kaynaklarından " +
+        "tarar, pazar boşluklarını çıkarır. Şikayet platformları kullanım şartları gereği scrape edilmez. " +
+        "Her bulgu kaynaklı döner; bulunamayan veri için 'veri bulunamadı' yazılır.",
+      inputSchema: {
+        konu: z.string().min(3).describe("Rakipleri analiz edilecek konu/ürün (örn: 'online terapi platformu')"),
+      },
+    },
+    async ({ konu }) => {
+      const { rapor } = await rakipAnaliz(konu);
+      return { content: [{ type: "text", text: rapor }] };
+    }
+  );
+
+  server.registerTool(
+    "regulasyon_kontrol",
+    {
+      title: "Regülasyon Kontrolü (Türkiye)",
+      description:
+        "Bir konunun Türkiye'deki regülasyon durumunu tarar: bugünkü Resmî Gazete fihristi (resmigazete.gov.tr) + " +
+        "güncel mevzuat/yönetmelik haberleri. Hukuki danışmanlık değildir. Kanıtlar URL ve erişim tarihiyle döner.",
+      inputSchema: {
+        konu: z.string().min(3).describe("Regülasyonu kontrol edilecek konu (örn: 'kripto ödeme', 'e-ticaret vergi')"),
+      },
+    },
+    async ({ konu }) => {
+      const { rapor } = await regulasyonKontrol(konu);
+      return { content: [{ type: "text", text: rapor }] };
+    }
+  );
+
+  server.registerTool(
+    "gunluk_firsat_radari",
+    {
+      title: "Günlük Fırsat Radarı (Türkiye)",
+      description:
+        "Türkiye'nin bugünkü Google Trends aramalarını + güncel AI/startup/yatırım haberlerini tarayıp günün " +
+        "fırsat sinyallerini çıkarır. Parametre gerektirmez. Tüm bulgular kaynak URL'si ve erişim tarihiyle döner.",
+      inputSchema: {},
+    },
+    async () => {
+      const { rapor } = await gunlukFirsatRadari();
+      return { content: [{ type: "text", text: rapor }] };
     }
   );
 
@@ -77,7 +161,8 @@ function serverOlustur(): McpServer {
           text: [
             "🇹🇷 Türkiye Fırsat Radarı aktif.",
             `Notion bağlantısı: ${notionHazirMi() ? "✅ hazır" : "❌ yapılandırılmamış (analiz yine de çalışır)"}`,
-            "Araçlar: firsat_analiz, notion_kaydet, radar_durum",
+            "Araçlar: firsat_analiz, pazar_arastir, rakip_analiz, regulasyon_kontrol, gunluk_firsat_radari, notion_kaydet, radar_durum",
+            "Veri kaynakları: Google News RSS, Google Trends RSS, Resmî Gazete, TÜİK (best-effort) — hepsi ücretsiz, API anahtarsız.",
           ].join("\n"),
         },
       ],
