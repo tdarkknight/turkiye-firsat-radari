@@ -1,4 +1,4 @@
-# 🇹🇷 Türkiye Fırsat Radarı — MCP Server (v2)
+# 🇹🇷 Türkiye Fırsat Radarı — MCP Server (v3)
 
 Poke uyumlu MCP server. AI/startup/internet iş fikirlerini **güncel, kaynaklı Türkiye pazar
 verisiyle** analiz eder, kötü fikirleri eler, iyi fikirleri 100 üzerinden puanlar ve istersen
@@ -21,6 +21,9 @@ Notion database'ine kaydeder.
 | `rakip_analiz` | Rakip / fiyat / müşteri şikayeti sinyalleri ve pazar boşlukları (haber kaynaklı) |
 | `regulasyon_kontrol` | Bugünkü Resmî Gazete fihristi + regülasyon haberleri taraması (hukuki danışmanlık değildir) |
 | `gunluk_firsat_radari` | Türkiye Google Trends + AI/startup/yatırım haberlerinden günün fırsat sinyalleri |
+| `fikir_karsilastir` | 2-5 fikri aynı kriterlerle sıralar; kazananı, ana riski ve karar deneyini söyler |
+| `birim_ekonomi` | LTV, CAC, LTV/CAC, geri ödeme süresi ve başa baş müşteri sayısını hesaplar |
+| `dogrulama_plani` | 7-30 günlük görüşme + landing page + ödeme testi; başarı ve öldürme kriterleri |
 | `notion_kaydet` | Analiz edip sonucu Notion database'ine yazar (token gerekir) |
 | `radar_durum` | Server ve Notion bağlantı durumunu gösterir |
 
@@ -38,7 +41,7 @@ Notion database'ine kaydeder.
 ## Test
 
 ```bash
-npm test   # tsc build + node:test ile 24 birim testi (ağa çıkmaz, fetch mock'lanır)
+npm test   # tsc build + node:test ile 28 birim testi (ağa çıkmaz, fetch mock'lanır)
 ```
 
 ## Kurulum (Lokal)
@@ -125,7 +128,9 @@ Recipe prompt'una şöyle bir şey yazabilirsin:
 
 ```
 src/
-  index.ts    → Express + Streamable HTTP MCP server (stateless, /mcp)
-  analiz.ts   → Deterministik skorlama motoru (keyword tabanlı, harici API yok)
-  notion.ts   → Opsiyonel Notion API entegrasyonu (native fetch, ekstra paket yok)
+  index.ts      → Express + Streamable HTTP MCP server (stateless, /mcp)
+  analiz.ts     → Deterministik fırsat skorlama motoru
+  arastirma.ts  → Kaynaklı canlı pazar/rakip/regülasyon araştırması
+  karar.ts      → Fikir karşılaştırma, birim ekonomi ve doğrulama planı
+  notion.ts     → Opsiyonel Notion API entegrasyonu
 ```

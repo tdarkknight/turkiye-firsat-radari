@@ -9,12 +9,13 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { z } from "zod";
 import { canliVeriyleBirlestir, fikriAnalizEt, raporYaz } from "./analiz.js";
 import { gunlukFirsatRadari, pazarArastir, rakipAnaliz, regulasyonKontrol } from "./arastirma.js";
+import { birimEkonomiHesapla, dogrulamaPlaniOlustur, fikirleriKarsilastir } from "./karar.js";
 import { notionaKaydet, notionHazirMi } from "./notion.js";
 
 function serverOlustur(): McpServer {
   const server = new McpServer({
     name: "turkiye-firsat-radari",
-    version: "2.0.0",
+    version: "3.0.0",
   });
 
   server.registerTool(
@@ -124,6 +125,98 @@ function serverOlustur(): McpServer {
   );
 
   server.registerTool(
+    "fikir_karsilastir",
+    {
+      title: "Fikirleri Karşılaştır",
+      description:
+        "En fazla 5 iş fikrini aynı Türkiye fırsat kriterleriyle karşılaştırır, sıralar ve hangi fikrin neden öne çıktığını söyler. " +
+        "Yakın sonuçlarda puanla karar vermek yerine uygulanacak A/B talep testini önerir.",
+      inputSchema: {
+        fikirler: z
+          .array(
+            z.object({
+              ad: z.string().min(2).describe("Fikrin kısa adı"),
+              fikir: z.string().min(10).describe("Fikir açıklaması"),
+              sektor: z.string().optional().describe("Sektör"),
+              hedefKitle: z.string().optional().describe("Hedef kitle"),
+              gelirModeli: z.string().optional().describe("Gelir modeli"),
+            })
+          )
+          .min(2)
+          .max(5)
+          .describe("Karşılaştırılacak 2-5 fikir"),
+      },
+    },
+    async ({ fikirler }) => ({
+      content: [{ type: "text", text: fikirleriKarsilastir(fikirler) }],
+    })
+  );
+
+  server.registerTool(
+    "birim_ekonomi",
+    {
+      title: "Birim Ekonomi Radarı",
+      description:
+        "Bir iş modelinin ekonomik olarak çalışıp çalışmadığını hesaplar: LTV, CAC, LTV/CAC, CAC geri ödeme süresi ve başa baş müşteri sayısı. " +
+        "Varsayımları görünür kılar ve sağlıklı/sınırda/tehlikeli kararı verir.",
+      inputSchema: {
+        aylik_fiyat: z.number().positive().describe("Müşteri başına aylık fiyat, TL"),
+        brut_marj_yuzde: z.number().positive().max(100).describe("Brüt marj yüzdesi, örn. 80"),
+        musteri_edinme_maliyeti: z.number().positive().describe("CAC, TL"),
+        aylik_churn_yuzde: z.number().positive().max(100).describe("Aylık müşteri kayıp oranı, örn. 5"),
+        aylik_sabit_gider: z.number().nonnegative().describe("Aylık sabit gider, TL"),
+        ilk_yatirim: z.number().nonnegative().optional().describe("Başlangıç yatırımı, TL"),
+      },
+    },
+    async ({ aylik_fiyat, brut_marj_yuzde, musteri_edinme_maliyeti, aylik_churn_yuzde, aylik_sabit_gider, ilk_yatirim }) => ({
+      content: [
+        {
+          type: "text",
+          text: birimEkonomiHesapla({
+            aylikFiyat: aylik_fiyat,
+            brutMarjYuzde: brut_marj_yuzde,
+            musteriEdinmeMaliyeti: musteri_edinme_maliyeti,
+            aylikChurnYuzde: aylik_churn_yuzde,
+            aylikSabitGider: aylik_sabit_gider,
+            ilkYatirim: ilk_yatirim,
+          }),
+        },
+      ],
+    })
+  );
+
+  server.registerTool(
+    "dogrulama_plani",
+    {
+      title: "Doğrulama ve MVP Deney Planı",
+      description:
+        "Bir iş fikri için 7-30 günlük kanıt odaklı doğrulama planı üretir. Görüşme, landing page ve ödeme testleri; başarı eşikleri; " +
+        "GO/PIVOT/STOP ve öldürme kriterleri içerir. Kod yazmadan önce kullan.",
+      inputSchema: {
+        fikir: z.string().min(10).describe("Doğrulanacak iş fikri"),
+        hedef_kitle: z.string().min(2).describe("İlk hedef müşteri segmenti"),
+        gelir_modeli: z.string().optional().describe("Planlanan gelir modeli/fiyatlama"),
+        gun: z.number().int().min(7).max(30).default(14).describe("Plan süresi, 7-30 gün"),
+        butce_tl: z.number().nonnegative().optional().describe("Doğrulama reklam/test bütçesi, TL"),
+      },
+    },
+    async ({ fikir, hedef_kitle, gelir_modeli, gun, butce_tl }) => ({
+      content: [
+        {
+          type: "text",
+          text: dogrulamaPlaniOlustur({
+            fikir,
+            hedefKitle: hedef_kitle,
+            gelirModeli: gelir_modeli,
+            gun,
+            butceTl: butce_tl,
+          }),
+        },
+      ],
+    })
+  );
+
+  server.registerTool(
     "notion_kaydet",
     {
       title: "Notion'a Kaydet",
@@ -161,7 +254,7 @@ function serverOlustur(): McpServer {
           text: [
             "🇹🇷 Türkiye Fırsat Radarı aktif.",
             `Notion bağlantısı: ${notionHazirMi() ? "✅ hazır" : "❌ yapılandırılmamış (analiz yine de çalışır)"}`,
-            "Araçlar: firsat_analiz, pazar_arastir, rakip_analiz, regulasyon_kontrol, gunluk_firsat_radari, notion_kaydet, radar_durum",
+            "Araçlar: firsat_analiz, pazar_arastir, rakip_analiz, regulasyon_kontrol, gunluk_firsat_radari, fikir_karsilastir, birim_ekonomi, dogrulama_plani, notion_kaydet, radar_durum",
             "Veri kaynakları: Google News RSS, Google Trends RSS, Resmî Gazete, TÜİK (best-effort) — hepsi ücretsiz, API anahtarsız.",
           ].join("\n"),
         },

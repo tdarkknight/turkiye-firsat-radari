@@ -1,6 +1,6 @@
 {
   "name": "turkiye-firsat-radari-mcp",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Türkiye Fırsat Radarı - Poke uyumlu MCP server. AI/startup fikirlerini güncel, kaynaklı Türkiye pazar verisiyle analiz eder, puanlar, istersen Notion'a kaydeder.",
   "type": "module",
   "main": "dist/index.js",

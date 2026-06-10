@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { canliVeriyleBirlestir, fikriAnalizEt } from "../analiz.js";
 import { gunlukFirsatRadari, pazarArastir, rakipAnaliz, regulasyonKontrol } from "../arastirma.js";
 import { cacheTemizle, guvenliFetch, KaynakHatasi, type FetchFn } from "../fetcher.js";
+import { birimEkonomiHesapla, dogrulamaPlaniOlustur, fikirleriKarsilastir } from "../karar.js";
 import { haberAra, resmiGazeteAra, trendlerTR, tuikDene } from "../kaynaklar.js";
 import { entityCoz, htmlLinkleriCoz, rssItemleriCoz } from "../rss.js";
 import { kaynakGuvenilirligi, tazelikPuani, veriKalitesiPuani } from "../tipler.js";
@@ -231,4 +232,64 @@ test("canliVeriyleBirlestir: düşük kanıt kalitesi risk olarak yazılır", ()
   const statik = fikriAnalizEt("Bambaşka niş bir fikir hakkında uzun açıklama metni");
   const sonuc = canliVeriyleBirlestir(statik, 1);
   assert.ok(sonuc.riskler.some((r) => r.includes("kanıt kalitesi düşük")));
+});
+
+// ── v3 karar araçları ──
+test("fikirleriKarsilastir: fikirleri sıralar ve karar önerir", () => {
+  const rapor = fikirleriKarsilastir([
+    {
+      ad: "KOBİ AI",
+      fikir: "Türkiye KOBİleri için Türkçe WhatsApp yapay zeka müşteri destek chatbotu",
+      sektor: "B2B SaaS",
+      hedefKitle: "KOBİ",
+      gelirModeli: "aylık abonelik",
+    },
+    {
+      ad: "Yemek",
+      fikir: "Türkiye genelinde yeni yemek siparişi ve hızlı teslimat pazaryeri",
+      sektor: "e-ticaret",
+      hedefKitle: "herkes",
+      gelirModeli: "komisyon",
+    },
+  ]);
+  assert.ok(rapor.includes("KOBİ AI"));
+  assert.ok(rapor.includes("SIRALAMA"));
+  assert.ok(rapor.includes("KARAR"));
+});
+
+test("birimEkonomiHesapla: sağlıklı model için temel metrikleri hesaplar", () => {
+  const rapor = birimEkonomiHesapla({
+    aylikFiyat: 1000,
+    brutMarjYuzde: 80,
+    musteriEdinmeMaliyeti: 1500,
+    aylikChurnYuzde: 5,
+    aylikSabitGider: 100000,
+  });
+  assert.ok(rapor.includes("SAĞLIKLI"));
+  assert.ok(rapor.includes("LTV/CAC"));
+  assert.ok(rapor.includes("Başa baş"));
+});
+
+test("birimEkonomiHesapla: kötü ekonomi için tehlikeli kararı verir", () => {
+  const rapor = birimEkonomiHesapla({
+    aylikFiyat: 100,
+    brutMarjYuzde: 30,
+    musteriEdinmeMaliyeti: 1000,
+    aylikChurnYuzde: 20,
+    aylikSabitGider: 100000,
+  });
+  assert.ok(rapor.includes("TEHLİKELİ"));
+});
+
+test("dogrulamaPlaniOlustur: eşikler ve öldürme kriterleri üretir", () => {
+  const rapor = dogrulamaPlaniOlustur({
+    fikir: "KOBİler için Türkçe yapay zeka müşteri destek chatbotu",
+    hedefKitle: "10-50 çalışanlı e-ticaret KOBİleri",
+    gelirModeli: "aylık abonelik",
+    gun: 14,
+    butceTl: 4000,
+  });
+  assert.ok(rapor.includes("14 GÜNLÜK"));
+  assert.ok(rapor.includes("ÖLDÜRME KRİTERLERİ"));
+  assert.ok(rapor.includes("GO:"));
 });
