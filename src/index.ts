@@ -15,7 +15,7 @@ import { notionaKaydet, notionHazirMi } from "./notion.js";
 function serverOlustur(): McpServer {
   const server = new McpServer({
     name: "turkiye-firsat-radari",
-    version: "3.0.0",
+    version: "3.1.0",
   });
 
   server.registerTool(
@@ -114,8 +114,9 @@ function serverOlustur(): McpServer {
     {
       title: "Günlük Fırsat Radarı (Türkiye)",
       description:
-        "Türkiye'nin bugünkü Google Trends aramalarını + güncel AI/startup/yatırım haberlerini tarayıp günün " +
-        "fırsat sinyallerini çıkarır. Parametre gerektirmez. Tüm bulgular kaynak URL'si ve erişim tarihiyle döner.",
+        "Türkiye'nin bugünkü Google Trends aramalarını + güncel AI/startup/yatırım haberlerini tarar. " +
+        "Spor, siyaset, magazin, bahis ve para kazanma açısı zayıf trendleri eler; kalan ticari fırsat adaylarını " +
+        "puanlayıp ürün açısıyla sıralar. Parametre gerektirmez. Bulgular kaynak URL'si ve erişim tarihiyle döner.",
       inputSchema: {},
     },
     async () => {

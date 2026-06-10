@@ -20,7 +20,7 @@ Notion database'ine kaydeder.
 | `pazar_arastir` | Konu için haber + pazar büyüklüğü + yatırım sinyalleri + TÜİK denemesi. Özet + kanıtlar + riskler + önerilen MVP |
 | `rakip_analiz` | Rakip / fiyat / müşteri şikayeti sinyalleri ve pazar boşlukları (haber kaynaklı) |
 | `regulasyon_kontrol` | Bugünkü Resmî Gazete fihristi + regülasyon haberleri taraması (hukuki danışmanlık değildir) |
-| `gunluk_firsat_radari` | Türkiye Google Trends + AI/startup/yatırım haberlerinden günün fırsat sinyalleri |
+| `gunluk_firsat_radari` | Spor/siyaset/magazini eleyip Google Trends + AI/startup haberlerinden ticari fırsat adaylarını puanlar |
 | `fikir_karsilastir` | 2-5 fikri aynı kriterlerle sıralar; kazananı, ana riski ve karar deneyini söyler |
 | `birim_ekonomi` | LTV, CAC, LTV/CAC, geri ödeme süresi ve başa baş müşteri sayısını hesaplar |
 | `dogrulama_plani` | 7-30 günlük görüşme + landing page + ödeme testi; başarı ve öldürme kriterleri |
@@ -41,7 +41,7 @@ Notion database'ine kaydeder.
 ## Test
 
 ```bash
-npm test   # tsc build + node:test ile 28 birim testi (ağa çıkmaz, fetch mock'lanır)
+npm test   # tsc build + node:test ile 30 birim testi (ağa çıkmaz, fetch mock'lanır)
 ```
 
 ## Kurulum (Lokal)

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { canliVeriyleBirlestir, fikriAnalizEt } from "../analiz.js";
-import { gunlukFirsatRadari, pazarArastir, rakipAnaliz, regulasyonKontrol } from "../arastirma.js";
+import { gunlukFirsatRadari, pazarArastir, rakipAnaliz, regulasyonKontrol, ticariTrendleriSec } from "../arastirma.js";
 import { cacheTemizle, guvenliFetch, KaynakHatasi, type FetchFn } from "../fetcher.js";
 import { birimEkonomiHesapla, dogrulamaPlaniOlustur, fikirleriKarsilastir } from "../karar.js";
 import { haberAra, resmiGazeteAra, trendlerTR, tuikDene } from "../kaynaklar.js";
@@ -28,6 +28,8 @@ const ORNEK_RSS = `<?xml version="1.0"?><rss><channel>
 
 const ORNEK_TRENDS = `<?xml version="1.0"?><rss xmlns:ht="https://trends.google.com/trending/rss"><channel>
 <item><title>yapay zeka</title><ht:approx_traffic>5000+</ht:approx_traffic><pubDate>${new Date().toUTCString()}</pubDate><ht:news_item><ht:news_item_title>AI haberi</ht:news_item_title><ht:news_item_url>https://ntv.com.tr/ai</ht:news_item_url></ht:news_item></item>
+<item><title>arda turan</title><ht:approx_traffic>20000+</ht:approx_traffic><pubDate>${new Date().toUTCString()}</pubDate><ht:news_item><ht:news_item_title>Transfer haberi</ht:news_item_title><ht:news_item_url>https://spor.test/transfer</ht:news_item_url></ht:news_item></item>
+<item><title>e devlet çöktü mü</title><ht:approx_traffic>1000+</ht:approx_traffic><pubDate>${new Date().toUTCString()}</pubDate><ht:news_item><ht:news_item_title>Erişim problemi</ht:news_item_title><ht:news_item_url>https://haber.test/edevlet</ht:news_item_url></ht:news_item></item>
 </channel></rss>`;
 
 const ORNEK_GAZETE = `<html><body>
@@ -54,7 +56,7 @@ test("veriKalitesiPuani: kanıt yoksa 0", () => {
 // ── rss ──
 test("rssItemleriCoz: başlık, link, pubDate ve namespace'li tag çözer", () => {
   const itemler = rssItemleriCoz(ORNEK_TRENDS, ["ht:approx_traffic", "ht:news_item_url"]);
-  assert.equal(itemler.length, 1);
+  assert.equal(itemler.length, 3);
   assert.equal(itemler[0].title, "yapay zeka");
   assert.equal(itemler[0].extra["ht:approx_traffic"], "5000+");
   assert.equal(itemler[0].extra["ht:news_item_url"], "https://ntv.com.tr/ai");
@@ -201,6 +203,27 @@ test("gunlukFirsatRadari: trendler + haberler raporda", async () => {
   const { rapor } = await gunlukFirsatRadari({ fetchFn: TUM_KAYNAK_MOCK });
   assert.ok(rapor.includes("yapay zeka"));
   assert.ok(rapor.includes("GÜNLÜK FIRSAT RADARI"));
+  assert.ok(rapor.includes("BİLDİRİMLİK TİCARİ FIRSAT ADAYLARI"));
+  assert.ok(!rapor.includes("arda turan"));
+});
+
+test("ticariTrendleriSec: spor/siyaseti eler, ticari sinyalleri sıralar", () => {
+  const adaylar = ticariTrendleriSec([
+    { baslik: "arda turan", yaklasikTrafik: "20000+", haberBasligi: "transfer haberi" },
+    { baslik: "yapay zeka", yaklasikTrafik: "5000+", haberBasligi: "AI agent yatırımı" },
+    { baslik: "e devlet çöktü mü", yaklasikTrafik: "1000+", haberBasligi: "erişim problemi" },
+  ]);
+  assert.equal(adaylar.length, 2);
+  assert.equal(adaylar[0].baslik, "yapay zeka");
+  assert.ok(adaylar.every((aday) => aday.ticariPuan >= 5));
+});
+
+test("ticariTrendleriSec: ticari sinyal yoksa boş döner", () => {
+  const adaylar = ticariTrendleriSec([
+    { baslik: "ünlü oyuncu yeni dizisi", yaklasikTrafik: "20000+" },
+    { baslik: "futbol transfer haberi", yaklasikTrafik: "50000+" },
+  ]);
+  assert.equal(adaylar.length, 0);
 });
 
 test("araştırma: tüm kaynaklar çökünce rapor 'veri bulunamadı' ile döner, fırlatmaz", async () => {
