@@ -16,7 +16,8 @@ Notion database'ine kaydeder.
 
 | Araç | Ne yapar |
 |---|---|
-| `firsat_analiz` | Statik skor (0.9x ölçekli: pazar 25, TR uyumu 25, rekabet 20, regülasyon 15, gelir 15) + canlı veri doğrulaması (10). **<40 = ELENDİ, 40-69 = ORTA, 70+ = FIRSAT** |
+| `firsat_analiz` | Statik skor (0.9x ölçekli: pazar 25, TR uyumu 25, rekabet 20, regülasyon 15, gelir 15) + canlı veri doğrulaması (10). **<40 = ELENDİ, 40-69 = ORTA, 70+ = FIRSAT**. Notion bağlıysa radar hafızası: önceki skorla karşılaştırır ve otomatik kaydeder |
+| `klon_radar` | Product Hunt + Show HN'den dünyada yeni çıkan ürünleri çeker, her biri için Türkçe haber taraması yapar; TR'de görünür oyuncu sinyali olmayanları 🟢 boşluk adayı işaretler |
 | `pazar_arastir` | Konu için haber + pazar büyüklüğü + yatırım sinyalleri + TÜİK denemesi. Özet + kanıtlar + riskler + önerilen MVP |
 | `rakip_analiz` | Rakip / fiyat / müşteri şikayeti sinyalleri ve pazar boşlukları (haber kaynaklı) |
 | `regulasyon_kontrol` | Bugünkü Resmî Gazete fihristi + regülasyon haberleri taraması (hukuki danışmanlık değildir) |
@@ -30,6 +31,8 @@ Notion database'ine kaydeder.
 ## Veri kaynakları ve dürüstlük kuralları
 
 - **Google News RSS** (`news.google.com/rss/search`) — Türkiye odaklı haber araması
+- **Product Hunt** (`producthunt.com/feed`) + **Show HN** (`hnrss.org/show`) — global yeni ürün radarı (klon_radar)
+- **Derin kanıt**: doğrudan erişilebilen haber sayfalarından ilk paragraflar alıntı olarak eklenir (Google News yönlendirme linkleri atlanır, içerik uydurulmaz)
 - **Google Trends RSS** (`trends.google.com/trending/rss?geo=TR`) — günlük arama trendleri
 - **Resmî Gazete** (`resmigazete.gov.tr`) — günün fihristi, sunucu taraflı HTML
 - **TÜİK** (`data.tuik.gov.tr`) — portal JavaScript gerektirdiği için sunucu taraflı erişim sınırlıdır;
@@ -38,10 +41,31 @@ Notion database'ine kaydeder.
   haber kaynaklarından derlenir
 - Sonuçlar 10 dk cache'lenir (kaynaklara nazik davranmak için)
 
+## Radar Hafızası (Notion ile)
+
+Notion token + database ID tanımlıysa `firsat_analiz` her analizi otomatik kaydeder ve aynı fikir
+tekrar analiz edildiğinde önceki skorla karşılaştırır: "Önceki skor 62 (2026-05-20) → şimdi 78
+(+16 ↑ pencere açılıyor olabilir)". Render free diski kalıcı olmadığı için kalıcı depo Notion'dur.
+Token yoksa hafıza sessizce devre dışı kalır, analiz normal çalışır.
+
+## Sabah Brifingi (Poke Recipe ile)
+
+Server tarafında cron gerekmez — zamanlamayı Poke yapar:
+
+1. Poke'ta yeni bir **Automation/Recipe** oluştur, tetikleyiciyi **her gün 08:00** yap
+2. Recipe prompt'una şunu yaz:
+
+> "Türkiye Fırsat Radarı entegrasyonundaki `gunluk_firsat_radari` ve `klon_radar` araçlarını çağır.
+> İki rapordan en güçlü 3 fırsat adayını seç, her biri için tek cümlelik özet + kaynak linki ver.
+> Bildirimlik güçlü aday yoksa 'bugün radar boş' de, uydurma."
+
+3. Kaydet — her sabah telefona kısa brifing düşer. Render free tier uykudan ~30 sn'de uyanır,
+   Poke'un timeout'una takılırsa recipe'e "yanıt gelmezse 1 dk sonra tekrar dene" ekle.
+
 ## Test
 
 ```bash
-npm test   # tsc build + node:test ile 30 birim testi (ağa çıkmaz, fetch mock'lanır)
+npm test   # tsc build + node:test ile 43 birim testi (ağa çıkmaz, fetch mock'lanır)
 ```
 
 ## Kurulum (Lokal)

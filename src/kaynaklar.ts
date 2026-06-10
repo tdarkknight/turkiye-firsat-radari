@@ -10,7 +10,7 @@
 //                       erişilemezse dürüstçe "veri bulunamadı" döner.
 
 import { guvenliFetch, KaynakHatasi, type FetchSecenek } from "./fetcher.js";
-import { rssItemleriCoz, pubDateToISO, htmlLinkleriCoz } from "./rss.js";
+import { atomEntryleriCoz, rssItemleriCoz, pubDateToISO, htmlLinkleriCoz, paragrafCikar } from "./rss.js";
 import { bugunISO, kaynakGuvenilirligi, type Kanit, type KaynakSonuc } from "./tipler.js";
 
 function hataSonucu(e: unknown, kaynakAdi: string): KaynakSonuc {
@@ -141,4 +141,98 @@ export async function tuikDene(secenek: FetchSecenek = {}): Promise<KaynakSonuc>
   } catch (e) {
     return hataSonucu(e, "TÜİK");
   }
+}
+
+// ── Product Hunt (Atom feed, ücretsiz) ──
+export interface GlobalUrun {
+  ad: string;
+  url: string;
+  ozet?: string;
+  yayinTarihi?: string;
+  kaynak: "Product Hunt" | "Hacker News";
+}
+
+export async function productHuntYeniler(secenek: FetchSecenek = {}): Promise<KaynakSonuc & { urunler: GlobalUrun[] }> {
+  const url = "https://www.producthunt.com/feed";
+  try {
+    const xml = await guvenliFetch(url, secenek);
+    const entryler = atomEntryleriCoz(xml).slice(0, 10);
+    if (entryler.length === 0) {
+      return { durum: "veri bulunamadı", kanitlar: [], urunler: [], not: "Product Hunt feed'i boş döndü." };
+    }
+    const urunler: GlobalUrun[] = entryler.map((e) => ({
+      ad: e.title,
+      url: e.link || url,
+      ozet: e.ozet,
+      yayinTarihi: pubDateToISO(e.published),
+      kaynak: "Product Hunt",
+    }));
+    return {
+      durum: "ok",
+      urunler,
+      kanitlar: urunler.map((u) => ({
+        iddia: `"${u.ad}" Product Hunt'ta yayında${u.ozet ? ` — ${u.ozet.slice(0, 120)}` : ""}`,
+        url: u.url,
+        kaynak: "Product Hunt",
+        yayinTarihi: u.yayinTarihi,
+        erisimTarihi: bugunISO(),
+        guvenilirlik: 0.7,
+      })),
+    };
+  } catch (e) {
+    return { ...hataSonucu(e, "Product Hunt"), urunler: [] };
+  }
+}
+
+// ── Hacker News Show HN (hnrss.org, ücretsiz) ──
+export async function hackerNewsShow(secenek: FetchSecenek = {}): Promise<KaynakSonuc & { urunler: GlobalUrun[] }> {
+  const url = "https://hnrss.org/show?points=30&count=15";
+  try {
+    const xml = await guvenliFetch(url, secenek);
+    const itemler = rssItemleriCoz(xml).slice(0, 10);
+    if (itemler.length === 0) {
+      return { durum: "veri bulunamadı", kanitlar: [], urunler: [], not: "Show HN feed'i boş döndü." };
+    }
+    const urunler: GlobalUrun[] = itemler.map((i) => ({
+      ad: i.title.replace(/^Show HN:\s*/i, ""),
+      url: i.link || url,
+      yayinTarihi: pubDateToISO(i.pubDate),
+      kaynak: "Hacker News",
+    }));
+    return {
+      durum: "ok",
+      urunler,
+      kanitlar: urunler.map((u) => ({
+        iddia: `"${u.ad}" Show HN'de (30+ puan, topluluk ilgisi var)`,
+        url: u.url,
+        kaynak: "Hacker News",
+        yayinTarihi: u.yayinTarihi,
+        erisimTarihi: bugunISO(),
+        guvenilirlik: 0.65,
+      })),
+    };
+  } catch (e) {
+    return { ...hataSonucu(e, "Hacker News"), urunler: [] };
+  }
+}
+
+// ── Derin kanıt: sayfa içeriğinden gerçek paragraf çek ──
+// Google News linkleri JS yönlendirmesi olduğu için atlanır (içerik çekilemez, uydurma da yapılmaz).
+export async function derinKanitEkle(kanitlar: Kanit[], secenek: FetchSecenek = {}, maksimum = 3): Promise<Kanit[]> {
+  const adaylar = kanitlar
+    .filter((k) => !k.alinti && !/news\.google\.com/.test(k.url) && k.url.startsWith("http"))
+    .slice(0, maksimum);
+
+  await Promise.all(
+    adaylar.map(async (k) => {
+      try {
+        const html = await guvenliFetch(k.url, { ...secenek, timeoutMs: secenek.timeoutMs ?? 8000 });
+        const alinti = paragrafCikar(html);
+        if (alinti) k.alinti = alinti;
+      } catch {
+        // alıntı alınamadıysa sessizce geç — başlık + URL zaten kanıt olarak duruyor
+      }
+    })
+  );
+  return kanitlar;
 }

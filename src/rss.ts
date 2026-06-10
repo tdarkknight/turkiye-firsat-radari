@@ -71,3 +71,54 @@ export function htmlLinkleriCoz(html: string): Array<{ href: string; metin: stri
   }
   return sonuc;
 }
+
+// ── Atom feed desteği (Product Hunt gibi) ──
+export interface AtomEntry {
+  title: string;
+  link: string;
+  published?: string;
+  ozet?: string;
+}
+
+export function atomEntryleriCoz(xml: string): AtomEntry[] {
+  const entryler: AtomEntry[] = [];
+  const bloklar = xml.match(/<entry[\s>][\s\S]*?<\/entry>/gi) ?? [];
+
+  for (const blok of bloklar) {
+    const titleM = blok.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    if (!titleM) continue;
+    const linkM =
+      blok.match(/<link[^>]*rel=["']alternate["'][^>]*href=["']([^"']+)["']/i) ??
+      blok.match(/<link[^>]*href=["']([^"']+)["']/i);
+    const publishedM = blok.match(/<(published|updated)[^>]*>([\s\S]*?)<\/\1>/i);
+    const contentM = blok.match(/<(content|summary)[^>]*>([\s\S]*?)<\/\1>/i);
+
+    entryler.push({
+      title: entityCoz(titleM[1]),
+      link: linkM ? entityCoz(linkM[1]) : "",
+      published: publishedM ? entityCoz(publishedM[2]) : undefined,
+      ozet: contentM
+        ? entityCoz(contentM[2]).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300)
+        : undefined,
+    });
+  }
+  return entryler;
+}
+
+/** Makale HTML'inden ilk anlamlı paragrafları çıkarır (derin kanıt için). */
+export function paragrafCikar(html: string, maksKarakter = 400): string | undefined {
+  // script/style bloklarını at
+  const temiz = html.replace(/<(script|style|nav|header|footer)[\s\S]*?<\/\1>/gi, "");
+  const paragraflar = temiz.match(/<p[^>]*>([\s\S]*?)<\/p>/gi) ?? [];
+
+  const metinler: string[] = [];
+  for (const p of paragraflar) {
+    const metin = entityCoz(p.replace(/<[^>]+>/g, " ").replace(/\s+/g, " "));
+    // çerez bildirimi / menü kırıntısı gibi kısa parçaları ele
+    if (metin.length >= 80) metinler.push(metin);
+    if (metinler.join(" ").length >= maksKarakter) break;
+  }
+  if (metinler.length === 0) return undefined;
+  const birlesik = metinler.join(" ");
+  return birlesik.length > maksKarakter ? `${birlesik.slice(0, maksKarakter)}…` : birlesik;
+}

@@ -8,14 +8,14 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { canliVeriyleBirlestir, fikriAnalizEt, raporYaz } from "./analiz.js";
-import { gunlukFirsatRadari, pazarArastir, rakipAnaliz, regulasyonKontrol } from "./arastirma.js";
+import { gunlukFirsatRadari, klonRadar, pazarArastir, rakipAnaliz, regulasyonKontrol } from "./arastirma.js";
 import { birimEkonomiHesapla, dogrulamaPlaniOlustur, fikirleriKarsilastir } from "./karar.js";
-import { notionaKaydet, notionHazirMi } from "./notion.js";
+import { hafizaRaporu, notionGecmis, notionaKaydet, notionHazirMi } from "./notion.js";
 
 function serverOlustur(): McpServer {
   const server = new McpServer({
     name: "turkiye-firsat-radari",
-    version: "3.1.0",
+    version: "3.2.0",
   });
 
   server.registerTool(
@@ -50,9 +50,34 @@ function serverOlustur(): McpServer {
       }
 
       const sonuc = canliVeriyleBirlestir(statik, veriKalitesi);
+
+      // Radar hafızası (Notion yapılandırılmışsa): önceki skorla karşılaştır + otomatik kaydet
+      let hafiza = "";
+      if (notionHazirMi()) {
+        const gecmis = await notionGecmis(fikir);
+        hafiza = hafizaRaporu(gecmis, sonuc.puan);
+        await notionaKaydet(fikir, sonuc); // hafıza için otomatik kayıt
+      }
+
       return {
-        content: [{ type: "text", text: `${raporYaz(fikir, sonuc)}${canliRapor}` }],
+        content: [{ type: "text", text: `${raporYaz(fikir, sonuc)}${hafiza}${canliRapor}` }],
       };
+    }
+  );
+
+  server.registerTool(
+    "klon_radar",
+    {
+      title: "Klon Radarı (global → Türkiye)",
+      description:
+        "Dünyada yeni çıkan ürünleri (Product Hunt + Show HN) tarar, her biri için Türkçe haber taraması yapar " +
+        "ve Türkiye'de görünür oyuncu sinyali olmayan ürünleri 'boşluk adayı' olarak işaretler. " +
+        "Her bulgu kaynak URL'si ve erişim tarihiyle döner. 'TR'de haber yok ≠ rakip yok' uyarısını her zaman içerir.",
+      inputSchema: {},
+    },
+    async () => {
+      const { rapor } = await klonRadar();
+      return { content: [{ type: "text", text: rapor }] };
     }
   );
 
@@ -255,8 +280,9 @@ function serverOlustur(): McpServer {
           text: [
             "🇹🇷 Türkiye Fırsat Radarı aktif.",
             `Notion bağlantısı: ${notionHazirMi() ? "✅ hazır" : "❌ yapılandırılmamış (analiz yine de çalışır)"}`,
-            "Araçlar: firsat_analiz, pazar_arastir, rakip_analiz, regulasyon_kontrol, gunluk_firsat_radari, fikir_karsilastir, birim_ekonomi, dogrulama_plani, notion_kaydet, radar_durum",
-            "Veri kaynakları: Google News RSS, Google Trends RSS, Resmî Gazete, TÜİK (best-effort) — hepsi ücretsiz, API anahtarsız.",
+            "Araçlar: firsat_analiz, klon_radar, pazar_arastir, rakip_analiz, regulasyon_kontrol, gunluk_firsat_radari, fikir_karsilastir, birim_ekonomi, dogrulama_plani, notion_kaydet, radar_durum",
+            "Veri kaynakları: Google News RSS, Google Trends RSS, Product Hunt, Show HN, Resmî Gazete, TÜİK (best-effort) — hepsi ücretsiz, API anahtarsız.",
+            `Radar hafızası: ${notionHazirMi() ? "✅ aktif — analizler Notion'a kaydedilir, skor değişimi takip edilir" : "❌ pasif (Notion token gerekir)"}`,
           ].join("\n"),
         },
       ],

@@ -7,6 +7,7 @@ export interface Kanit {
   yayinTarihi?: string;   // ISO tarih, biliniyorsa
   erisimTarihi: string;   // ISO tarih — bu veriye ne zaman eriştik
   guvenilirlik: number;   // 0..1
+  alinti?: string;        // derin kanıt: sayfa içeriğinden alınan gerçek paragraf
 }
 
 export interface KaynakSonuc {
@@ -58,5 +59,6 @@ export function bugunISO(): string {
 
 export function kanitSatiri(k: Kanit): string {
   const tarih = k.yayinTarihi ? ` (${k.yayinTarihi.slice(0, 10)})` : "";
-  return `  📌 ${k.iddia}${tarih}\n     ${k.url} — kaynak: ${k.kaynak}, güvenilirlik: ${Math.round(k.guvenilirlik * 100)}%, erişim: ${k.erisimTarihi}`;
+  const alinti = k.alinti ? `\n     💬 "${k.alinti}"` : "";
+  return `  📌 ${k.iddia}${tarih}\n     ${k.url} — kaynak: ${k.kaynak}, güvenilirlik: ${Math.round(k.guvenilirlik * 100)}%, erişim: ${k.erisimTarihi}${alinti}`;
 }

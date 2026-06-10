@@ -3,7 +3,17 @@
 // Kanıt yoksa "veri bulunamadı" yazılır; tahmin üretilmez.
 
 import type { FetchSecenek } from "./fetcher.js";
-import { haberAra, resmiGazeteAra, trendlerTR, tuikDene, type TrendMaddesi } from "./kaynaklar.js";
+import {
+  derinKanitEkle,
+  haberAra,
+  hackerNewsShow,
+  productHuntYeniler,
+  resmiGazeteAra,
+  trendlerTR,
+  tuikDene,
+  type GlobalUrun,
+  type TrendMaddesi,
+} from "./kaynaklar.js";
 import { kanitSatiri, veriKalitesiPuani, type Kanit, type KaynakSonuc } from "./tipler.js";
 
 function bolum(baslik: string, sonuc: KaynakSonuc): string {
@@ -94,7 +104,7 @@ export async function pazarArastir(konu: string, secenek: FetchSecenek = {}): Pr
     tuikDene(secenek),
   ]);
 
-  const kanitlar = tumKanitlar(genel, pazar, yatirim, tuik);
+  const kanitlar = await derinKanitEkle(tumKanitlar(genel, pazar, yatirim, tuik), secenek);
   const kalite = veriKalitesiPuani(kanitlar);
 
   const riskler: string[] = [];
@@ -244,4 +254,92 @@ export async function gunlukFirsatRadari(secenek: FetchSecenek = {}): Promise<Ar
   ].join("\n");
 
   return { rapor, kanitlar, veriKalitesi: kalite };
+}
+
+// ── klon_radar ──
+// Dünyada yeni çıkan ürünleri (Product Hunt + Show HN) çeker, her biri için
+// Türkçe haber taraması yapar: TR'de sinyal yoksa "boşluk adayı" olarak işaretler.
+// Dürüstlük: "TR'de haber yok" ≠ "TR'de rakip yok" — rapor bunu açıkça söyler.
+
+export interface KlonAdayi {
+  urun: GlobalUrun;
+  trSinyalSayisi: number;
+  trKanitlar: Kanit[];
+  durum: "boşluk adayı" | "TR'de sinyal var" | "kontrol edilemedi";
+}
+
+function urunAramaAdi(ad: string): string {
+  // "Ürün Adı — tagline" / "Ürün Adı - tagline" formatlarından adı ayıkla
+  return ad.split(/[—–|:-]/)[0].trim().slice(0, 60);
+}
+
+export async function klonRadar(secenek: FetchSecenek = {}, maksUrun = 6): Promise<ArastirmaCiktisi> {
+  const [ph, hn] = await Promise.all([productHuntYeniler(secenek), hackerNewsShow(secenek)]);
+
+  // İki kaynaktan dönüşümlü seç ki tek kaynak domine etmesin
+  const urunler: GlobalUrun[] = [];
+  for (let i = 0; i < maksUrun; i++) {
+    const sira = i % 2 === 0 ? ph.urunler : hn.urunler;
+    const aday = sira[Math.floor(i / 2)];
+    if (aday) urunler.push(aday);
+  }
+
+  const adaylar: KlonAdayi[] = await Promise.all(
+    urunler.map(async (urun): Promise<KlonAdayi> => {
+      const aramaAdi = urunAramaAdi(urun.ad);
+      const trSonuc = await haberAra(`"${aramaAdi}" Türkiye`, secenek);
+      if (trSonuc.durum === "hata") {
+        return { urun, trSinyalSayisi: 0, trKanitlar: [], durum: "kontrol edilemedi" };
+      }
+      return {
+        urun,
+        trSinyalSayisi: trSonuc.kanitlar.length,
+        trKanitlar: trSonuc.kanitlar.slice(0, 2),
+        durum: trSonuc.kanitlar.length === 0 ? "boşluk adayı" : "TR'de sinyal var",
+      };
+    })
+  );
+
+  const kanitlar = [
+    ...ph.kanitlar.slice(0, maksUrun),
+    ...hn.kanitlar.slice(0, maksUrun),
+    ...adaylar.flatMap((a) => a.trKanitlar),
+  ];
+  const kalite = veriKalitesiPuani(kanitlar);
+  const bosluklar = adaylar.filter((a) => a.durum === "boşluk adayı");
+
+  const adaySatirlari = adaylar.length
+    ? adaylar.flatMap((a, i) => [
+        `  ${i + 1}. [${a.durum === "boşluk adayı" ? "🟢 BOŞLUK ADAYI" : a.durum === "TR'de sinyal var" ? "🟡 TR'DE SİNYAL VAR" : "⚪ KONTROL EDİLEMEDİ"}] ${a.urun.ad}`,
+        `     Global kaynak: ${a.urun.url} (${a.urun.kaynak}, erişim: ${bugunkuTarih()})`,
+        ...(a.urun.ozet ? [`     Ne yapıyor: ${a.urun.ozet.slice(0, 150)}`] : []),
+        ...(a.durum === "TR'de sinyal var"
+          ? a.trKanitlar.map((k) => `     TR sinyali: ${k.iddia.slice(0, 100)} → ${k.url}`)
+          : a.durum === "boşluk adayı"
+            ? [`     TR haber taraması: 0 sonuç → görünür yerel oyuncu sinyali yok`]
+            : [`     TR taraması başarısız — veri bulunamadı, boşluk iddiası YAPILAMAZ`]),
+      ])
+    : ["  ⛔ veri bulunamadı — global ürün feed'lerine erişilemedi."];
+
+  const rapor = [
+    `🌍 KLON RADARI — global yeni ürünler × Türkiye boşluk taraması (${bugunkuTarih()})`,
+    ``,
+    `ÖZET: ${urunler.length} global ürün tarandı (Product Hunt: ${ph.durum}, Show HN: ${hn.durum}). ` +
+      `${bosluklar.length} boşluk adayı bulundu. Veri kalitesi: ${kalite}/10.`,
+    ``,
+    `ADAYLAR:`,
+    ...adaySatirlari,
+    ``,
+    `RİSKLER:`,
+    `  ⚠️ "TR'de haber yok" ≠ "TR'de rakip yok" — sessiz büyüyen yerel rakipler haberlere yansımayabilir. Boşluk adaylarını rakip_analiz aracıyla derinleştir.`,
+    `  ⚠️ Global ürünün TR'de talep karşılığı olduğu varsayılamaz; fiyatlandırma ve alışkanlık farkı kontrol edilmeli.`,
+    ``,
+    `ÖNERİLEN MVP: En güçlü boşluk adayını seç → ürünün global landing'ini incele → TR'ye yerelleştirilmiş tek özellikli versiyonun landing page'ini 1 haftada test et.`,
+  ].join("\n");
+
+  return { rapor, kanitlar, veriKalitesi: kalite };
+}
+
+function bugunkuTarih(): string {
+  return new Date().toISOString().slice(0, 10);
 }
